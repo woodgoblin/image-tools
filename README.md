@@ -1,11 +1,10 @@
 # Image and Video Organizer
 
-[![CI](https://github.com/username/image-tools/workflows/CI/badge.svg)](https://github.com/username/image-tools/actions)
-[![codecov](https://codecov.io/gh/username/image-tools/branch/main/graph/badge.svg)](https://codecov.io/gh/username/image-tools)
+[![CI](https://github.com/woodgoblin/image-tools/workflows/CI/badge.svg)](https://github.com/woodgoblin/image-tools/actions)
+[![codecov](https://codecov.io/gh/woodgoblin/image-tools/branch/main/graph/badge.svg)](https://codecov.io/gh/woodgoblin/image-tools)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Python script that recursively organizes images and videos by their creation date, handles duplicates, and resolves naming conflicts.
 
@@ -125,16 +124,10 @@ black .
 isort .
 ```
 
-#### Lint with flake8:
-```bash
-flake8 .
-```
-
 #### Run all quality checks (same as CI):
 ```bash
 black --check --diff .
 isort --check-only --diff .
-flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 pytest test_image_organizer.py -v --cov=image_organizer --cov-report=xml
 ```
 

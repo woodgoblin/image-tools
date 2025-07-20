@@ -1,7 +1,8 @@
 """
 Configuration for pytest to enable human-readable test names.
 
-This uses the technique from https://medium.com/@dsmd90/python-displayname-analog-from-java-6a1d1ad3c468
+This uses the technique from
+https://medium.com/@dsmd90/python-displayname-analog-from-java-6a1d1ad3c468
 to display test docstrings as test names in reports.
 """
 
@@ -21,7 +22,7 @@ def pytest_collection_modifyitems(items):
             )
             if summary:
                 if hasattr(item, "callspec"):
-                    # For parameterized tests, preserve parameter id from the original nodeid
+                    # For parameterized tests, preserve parameter id
                     start = item.nodeid.find("[")
                     parameter_part = item.nodeid[start:] if start != -1 else ""
                     item._nodeid = summary + parameter_part
