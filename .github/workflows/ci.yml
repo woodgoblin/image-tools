@@ -24,7 +24,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libmediainfo-dev
+        sudo apt-get install -y libmediainfo-dev ffmpeg
     
     - name: Install Python dependencies
       run: |
@@ -40,9 +40,9 @@ jobs:
       run: |
         isort --check-only --diff .
     
-    - name: Run tests with pytest
+    - name: Run all tests with coverage
       run: |
-        pytest test_image_organizer.py -v --cov=image_organizer --cov-report=xml
+        pytest -v --cov=. --cov-report=xml --cov-report=term-missing
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3

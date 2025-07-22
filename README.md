@@ -1,4 +1,4 @@
-# Image and Video Organizer
+# Image and Video Tools
 
 [![CI](https://github.com/woodgoblin/image-tools/workflows/CI/badge.svg)](https://github.com/woodgoblin/image-tools/actions)
 [![codecov](https://codecov.io/gh/woodgoblin/image-tools/branch/main/graph/badge.svg)](https://codecov.io/gh/woodgoblin/image-tools)
@@ -6,154 +6,127 @@
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
-A Python script that recursively organizes images and videos by their creation date, handles duplicates, and resolves naming conflicts.
+Personal Python scripts for organizing photos/videos and tweaking their metadata timestamps.
 
-## Features
+## ⚠️ Please backup your files first!
 
-- **Recursive Processing**: Scans all subdirectories for supported media files
-- **Date-based Organization**: Sorts files into folders named `YYYY_MM_DD` based on creation date
-- **Metadata Extraction**: Uses EXIF data for images and metadata for videos, with filesystem fallback
-- **Duplicate Detection**: Hash-based deduplication to avoid copying identical files
-- **Conflict Resolution**: Automatically resolves naming conflicts by appending numbers
-- **Comprehensive Format Support**: 
-  - Images: JPG, JPEG, PNG, TIFF, TIF, BMP, GIF, WEBP
-  - Videos: MP4, MOV, AVI, MKV, WMV, FLV, WEBM, M4V
+These tools modify file metadata and filesystem timestamps. I strongly recommend creating backups before using them, especially if you're working with important media files.
+
+## What's in here
+
+### `image_organizer.py`
+Sorts your photos and videos into folders by date (like `2024_01_15/`). It reads EXIF data from photos and metadata from videos to figure out when they were taken.
+
+### `metadata_time_changer.py`
+Adjusts timestamps in your files. Useful when your camera's clock was wrong and you want to fix all the dates. Works on both metadata and file timestamps.
+
+### `avi_metadata_analyzer.py`
+Diagnostic tool that shows all the date fields in an AVI file. Helpful for debugging when Windows File Explorer shows weird dates.
+
+### `avi_riff_utils.py`
+Shared code for handling AVI files properly without corrupting them.
 
 ## Installation
 
-1. Clone this repository:
 ```bash
-git clone <repository_url>
+git clone <this-repo>
 cd image-tools
-```
 
-2. Create a virtual environment:
-```bash
+# Virtual environment (recommended)
 python -m venv venv
-```
+venv\Scripts\activate  # Windows
+# or: source venv/bin/activate  # Mac/Linux
 
-3. Activate the virtual environment:
-```bash
-# Windows
-venv\Scripts\activate
-
-# macOS/Linux
-source venv/bin/activate
-```
-
-4. Install dependencies:
-```bash
 pip install -r requirements.txt
 ```
 
-## Usage
+## How to use
 
-### Basic Usage
+### Organizing files by date
 ```bash
-python image_organizer.py /path/to/your/media/files
+# Creates an 'organized' folder with date-based subdirectories
+python image_organizer.py /path/to/your/photos
+
+# Or specify where to put the organized files
+python image_organizer.py /path/to/source --destination /path/to/organized
 ```
 
-This will create an `organized` folder in the source directory with files sorted by date.
+**Output structure:**
+```
+organized/
+├── 2024_01_15/
+│   ├── IMG_001.jpg
+│   └── IMG_002.jpg
+└── 2024_01_16/
+    └── VIDEO_001.mp4
+```
 
-### Custom Destination
+### Metadata Time Changer
+
+**⚠️ ALWAYS BACKUP FILES FIRST**
+
 ```bash
-python image_organizer.py /path/to/source --destination /path/to/destination
+# ALWAYS try dry-run first to see what would happen
+python metadata_time_changer.py /path/to/files "+1d" --dry-run
+
+# If it looks good, remove --dry-run to actually change the files
+python metadata_time_changer.py /path/to/files "+1d"
+
+# Some examples:
+python metadata_time_changer.py /path/to/files "+5d"        # Add 5 days
+python metadata_time_changer.py /path/to/files "-2w"        # Subtract 2 weeks  
+python metadata_time_changer.py /path/to/files "+1y 2m 3d"  # Add 1 year, 2 months, 3 days
 ```
 
-### Examples
-
+### Analyzing AVI files
 ```bash
-# Organize photos from a camera card
-python image_organizer.py "D:\DCIM\Camera" --destination "C:\Photos\Organized"
-
-# Organize mixed media files
-python image_organizer.py "C:\Users\John\Downloads" 
+# Shows all date fields Windows might be reading
+python avi_metadata_analyzer.py video.avi
 ```
 
-## How It Works
+## File formats supported
 
-1. **Discovery**: Recursively finds all supported image and video files
-2. **Date Extraction**: Attempts to extract creation date from:
-   - Image EXIF data (DateTimeOriginal, DateTime, DateTimeDigitized)
-   - Video metadata (recorded_date, tagged_date, encoded_date)
-   - File system timestamps (as fallback)
-3. **Organization**: Creates folders named `YYYY_MM_DD` for each unique date
-4. **Deduplication**: Calculates SHA-256 hashes to identify and skip duplicate files
-5. **Conflict Resolution**: Appends `_001`, `_002`, etc. for files with same name but different content
+**Images:** JPG, PNG, TIFF, BMP, GIF, WEBP  
+**Videos:** MP4, MOV, AVI, MKV, WMV, FLV, WEBM, M4V
 
-## Output Example
-
-```
-source_folder/
-├── IMG_001.jpg (2024-01-15)
-├── IMG_002.jpg (2024-01-15) 
-├── VIDEO_001.mp4 (2024-01-16)
-└── organized/
-    ├── 2024_01_15/
-    │   ├── IMG_001.jpg
-    │   └── IMG_002.jpg
-    └── 2024_01_16/
-        └── VIDEO_001.mp4
-```
+**Note about AVI files:** These are tricky because Windows File Explorer reads dates from specific places in the file. The tools here try to handle this properly, but AVI is a messy format.
 
 ## Testing
 
-Run the test suite:
 ```bash
-python -m pytest test_image_organizer.py -v
+# Run all tests
+python -m pytest
+
+# Run with coverage
+python -m pytest --cov=. --cov-report=html
 ```
 
-Run tests with coverage:
-```bash
-python -m pytest test_image_organizer.py -v --cov=image_organizer --cov-report=html
-```
+## Some technical notes
+
+- The organizer uses file hashes to detect duplicates
+- For photos, it reads EXIF DateTimeOriginal, DateTime, DateTimeDigitized
+- For videos, it tries various metadata fields depending on the format
+- AVI files get special treatment to keep Windows File Explorer happy
+- File modification times are synced with creation times for consistency
 
 ## Development
 
-### Code Quality Tools
-
-This project uses several tools to maintain code quality:
-
-#### Format code with Black:
+Code formatting:
 ```bash
 black .
-```
-
-#### Sort imports with isort:
-```bash
 isort .
 ```
 
-#### Run all quality checks (same as CI):
-```bash
-black --check --diff .
-isort --check-only --diff .
-pytest test_image_organizer.py -v --cov=image_organizer --cov-report=xml
-```
-
-### Development Setup
-```bash
-# Install development dependencies
-pip install -r requirements-dev.txt
-```
+The CI runs these checks plus all tests on Python 3.9-3.13.
 
 ## Dependencies
 
-- **Pillow**: Image processing and EXIF data extraction
-- **exifread**: Alternative EXIF data extraction
-- **pymediainfo**: Video metadata extraction
-- **pytest**: Testing framework
-
-## Error Handling
-
-The script handles various error conditions gracefully:
-- Missing or corrupted metadata
-- Unreadable files
-- Permission errors
-- Invalid file formats
-
-Any errors encountered during processing are reported in the final statistics without stopping the entire operation.
+Main ones: Pillow, pymediainfo, piexif, av, mutagen. See `requirements.txt` for the full list.
 
 ## License
 
-See LICENSE file for details.
+See LICENSE file.
+
+---
+
+**Remember: backup your files before running these tools!**
