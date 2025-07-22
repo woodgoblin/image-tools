@@ -607,7 +607,8 @@ class MetadataTimeChanger:
 
     def write_avi_metadata_safe_inplace_modify(self, file_path: Path, timestamp: datetime) -> bool:
         """
-        Professional AVI metadata modification using multiple specialized libraries.
+        RIFF-preserving AVI metadata modification that directly modifies IDIT chunk bytes.
+        This preserves Windows File Explorer compatibility by maintaining container structure.
         
         Args:
             file_path: Path to the AVI file
@@ -620,174 +621,75 @@ class MetadataTimeChanger:
             if self.dry_run:
                 return True
             
+            # Import required modules
+            import struct
+            import shutil
+            
             # Create backup first
             backup_path = file_path.with_suffix('.backup.avi')
-            import shutil
             shutil.copy2(file_path, backup_path)
             
-            success = False
-            
-            # Method 1: Try PyAV with CORRECT API
             try:
-                import av
+                # Read the entire file
+                with open(file_path, 'rb') as f:
+                    data = bytearray(f.read())
                 
-                temp_output = file_path.with_suffix('.temp.avi')
-                timestamp_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
-                iso_timestamp = timestamp.strftime('%Y-%m-%dT%H:%M:%S')
+                # Find IDIT chunk
+                idit_pos = data.find(b'IDIT')
+                if idit_pos == -1:
+                    self.errors.append(f"No IDIT chunk found in {file_path}")
+                    return False
                 
-                with av.open(str(file_path)) as input_container:
-                    with av.open(str(temp_output), 'w', format='avi') as output_container:
-                        # Set container-level metadata for AVI
-                        output_container.metadata['creation_time'] = iso_timestamp
-                        output_container.metadata['date'] = timestamp_str
-                        output_container.metadata['IDIT'] = timestamp_str  # Digitization time
-                        output_container.metadata['ICRD'] = timestamp.strftime('%a %b %d %H:%M:%S %Y')  # Creation date
-                        
-                        # Copy streams with CORRECT PyAV API
-                        for stream in input_container.streams:
-                            if stream.type == 'video':
-                                # Use codec_context.name and time_base for video streams
-                                output_stream = output_container.add_stream(stream.codec_context.name)
-                                output_stream.width = stream.codec_context.width
-                                output_stream.height = stream.codec_context.height
-                                output_stream.time_base = stream.time_base
-                                output_stream.codec_context.bit_rate = stream.codec_context.bit_rate
-                                
-                            elif stream.type == 'audio':
-                                # Use codec_context.name and sample_rate for audio streams
-                                output_stream = output_container.add_stream(stream.codec_context.name)
-                                output_stream.sample_rate = stream.codec_context.sample_rate
-                                output_stream.channels = stream.codec_context.channels
-                                output_stream.codec_context.bit_rate = stream.codec_context.bit_rate
-                        
-                        # Copy packets
-                        for packet in input_container.demux():
-                            if packet.dts is not None:
-                                # Map to corresponding output stream
-                                output_stream = output_container.streams[packet.stream.index]
-                                packet.stream = output_stream
-                                output_container.mux(packet)
+                # IDIT chunk structure: IDIT + 4-byte size + data
+                if idit_pos + 8 >= len(data):
+                    self.errors.append(f"Invalid IDIT chunk structure in {file_path}")
+                    return False
                 
-                # Replace original with modified file
-                if temp_output.exists() and temp_output.stat().st_size > 0:
-                    shutil.move(temp_output, file_path)
-                    success = True
-                    
+                # Read the chunk size (little-endian)
+                size_bytes = data[idit_pos + 4:idit_pos + 8]
+                chunk_size = struct.unpack('<L', size_bytes)[0]
+                
+                # Get the actual date data
+                date_start = idit_pos + 8
+                date_end = date_start + chunk_size
+                
+                if date_end > len(data):
+                    self.errors.append(f"IDIT chunk extends beyond file in {file_path}")
+                    return False
+                
+                # Format new date in Canon format (preserving exact structure)
+                new_date_str = timestamp.strftime('%a %b %d %H:%M:%S %Y').upper()
+                new_date_bytes = new_date_str.encode('ascii')
+                
+                # Pad or truncate to match original chunk size
+                if len(new_date_bytes) < chunk_size:
+                    # Pad with null bytes
+                    new_date_bytes += b'\x00' * (chunk_size - len(new_date_bytes))
+                elif len(new_date_bytes) > chunk_size:
+                    # Truncate if too long
+                    new_date_bytes = new_date_bytes[:chunk_size]
+                
+                # Replace the date data in the file
+                data[date_start:date_end] = new_date_bytes
+                
+                # Write the modified data back
+                with open(file_path, 'wb') as f:
+                    f.write(data)
+                
+                # Clean up backup if successful
+                backup_path.unlink()
+                return True
+                
             except Exception as e:
-                self.errors.append(f"PyAV fixed API method failed for {file_path}: {e}")
-                # Clean up temp file
-                temp_output = file_path.with_suffix('.temp.avi')
-                if temp_output.exists():
-                    temp_output.unlink()
-            
-            # Method 2: Try specialized PyQuicktimeMetaCLI (if available and PyAV failed)
-            if not success:
-                try:
-                    # Try to use the specialized quicktime metadata library
-                    import subprocess
-                    import json
-                    
-                    # Check if we can download and use the quicktime library
-                    quicktime_script = file_path.parent / 'qt_meta_temp.py'
-                    
-                    # Download the specialized script if not exists
-                    if not quicktime_script.exists():
-                        import urllib.request
-                        urllib.request.urlretrieve(
-                            'https://raw.githubusercontent.com/jchristman/PyQuicktimeMetaCLI/master/quicktime.py',
-                            quicktime_script
-                        )
-                    
-                    # Use the quicktime library to modify metadata
-                    if quicktime_script.exists():
-                        # Create a small script to modify the metadata
-                        modify_script = f'''
-import sys
-sys.path.insert(0, "{quicktime_script.parent}")
-from quicktime import QuicktimeFile
-
-qt_file = QuicktimeFile("{file_path}")
-qt_file.set_metadata("creation_time", "{timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-qt_file.set_metadata("IDIT", "{timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-qt_file.set_metadata("ICRD", "{timestamp.strftime('%a %b %d %H:%M:%S %Y')}")
-qt_file.save()
-'''
-                        
-                        temp_script = file_path.parent / 'temp_modify.py'
-                        temp_script.write_text(modify_script)
-                        
-                        result = subprocess.run([
-                            'python', str(temp_script)
-                        ], capture_output=True, text=True, timeout=30)
-                        
-                        if result.returncode == 0:
-                            success = True
-                        
-                        # Clean up
-                        if temp_script.exists():
-                            temp_script.unlink()
-                        if quicktime_script.exists():
-                            quicktime_script.unlink()
-                        
-                except Exception as e:
-                    self.errors.append(f"PyQuicktimeMetaCLI method failed for {file_path}: {e}")
-            
-            # Method 3: RESEARCH-BASED FFmpeg for AVI internal metadata
-            if not success:
-                try:
-                    timestamp_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
-                    # Format date EXACTLY as Windows expects for AVI files
-                    windows_date = timestamp.strftime('%a %b %d %H:%M:%S %Y')
-                    iso_timestamp = timestamp.strftime('%Y-%m-%dT%H:%M:%S')
-                    temp_output = file_path.with_suffix('.temp.avi')
-                    
-                    # RESEARCH-BASED FFmpeg command (from abdus.dev/posts/ffmpeg-metadata/)
-                    cmd = [
-                        'ffmpeg', '-y', '-i', str(file_path),
-                        '-c', 'copy',  # Copy streams without re-encoding
-                        '-movflags', 'use_metadata_tags',  # CRITICAL: Enable metadata writing
-                        '-map_metadata', '0',  # Preserve existing metadata
-                        '-metadata', f'date={windows_date}',  # Primary date field for AVI
-                        '-metadata', f'creation_time={iso_timestamp}',
-                        '-metadata', f'IDIT={windows_date}',  # Digitization time in Windows format
-                        '-metadata', f'ICRD={windows_date}',  # Creation date in Windows format
-                        str(temp_output)
-                    ]
-                    
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-                    
-                    if result.returncode == 0 and temp_output.exists() and temp_output.stat().st_size > 0:
-                        shutil.move(temp_output, file_path)
-                        success = True
-                    else:
-                        self.errors.append(f"Research-based FFmpeg failed for {file_path}: {result.stderr}")
-                        if temp_output.exists():
-                            temp_output.unlink()
-                        
-                except Exception as e:
-                    self.errors.append(f"Research-based FFmpeg failed for {file_path}: {e}")
-            
-            # Clean up backup if successful
-            if success and backup_path.exists():
-                backup_path.unlink()
-            elif backup_path.exists():
-                # Restore from backup if all methods failed
-                shutil.copy2(backup_path, file_path)
-                backup_path.unlink()
-            
-            return success
-            
-        except Exception as e:
-            self.errors.append(f"Professional AVI modifier failed for {file_path}: {e}")
-            # Restore from backup if it exists
-            backup_path = file_path.with_suffix('.backup.avi')
-            if backup_path.exists():
-                try:
-                    import shutil
+                self.errors.append(f"RIFF modification failed for {file_path}: {e}")
+                # Restore from backup
+                if backup_path.exists():
                     shutil.copy2(backup_path, file_path)
                     backup_path.unlink()
-                except:
-                    pass
+                return False
+            
+        except Exception as e:
+            self.errors.append(f"RIFF-preserving AVI modifier failed for {file_path}: {e}")
             return False
 
 
