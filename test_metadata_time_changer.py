@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from avi_riff_utils import find_idit_chunk, format_canon_date, parse_canon_date
 from metadata_time_changer import MetadataTimeChanger, TimeParsingError
 
 
@@ -735,8 +736,6 @@ class TestRIFFPreservingAVIFunctionality:
     def test_find_idit_chunk_success(self):
         """Find IDIT chunk in AVI file with valid IDIT chunk."""
         # Arrange
-        from avi_riff_date_fixer import find_idit_chunk
-
         test_avi = self.test_directory / "test_with_idit.avi"
         data = test_avi.read_bytes()
 
@@ -751,8 +750,6 @@ class TestRIFFPreservingAVIFunctionality:
     def test_find_idit_chunk_not_found(self):
         """Find IDIT chunk returns None when chunk is not present."""
         # Arrange
-        from avi_riff_date_fixer import find_idit_chunk
-
         test_avi = self.test_directory / "test_without_idit.avi"
         data = test_avi.read_bytes()
 
@@ -766,8 +763,6 @@ class TestRIFFPreservingAVIFunctionality:
     def test_parse_canon_date_valid_format(self):
         """Parse Canon date format successfully."""
         # Arrange
-        from avi_riff_date_fixer import parse_canon_date
-
         canon_date_string = "MON AUG 28 14:14:28 2006"
 
         # Act
@@ -785,8 +780,6 @@ class TestRIFFPreservingAVIFunctionality:
     def test_parse_canon_date_with_null_bytes(self):
         """Parse Canon date format with null bytes and whitespace."""
         # Arrange
-        from avi_riff_date_fixer import parse_canon_date
-
         canon_date_string = "MON AUG 28 14:14:28 2006\x00\x00  "
 
         # Act
@@ -799,8 +792,6 @@ class TestRIFFPreservingAVIFunctionality:
     def test_parse_canon_date_invalid_format(self):
         """Parse Canon date format with invalid format returns None."""
         # Arrange
-        from avi_riff_date_fixer import parse_canon_date
-
         invalid_date_string = "invalid date format"
 
         # Act
@@ -812,8 +803,6 @@ class TestRIFFPreservingAVIFunctionality:
     def test_format_canon_date(self):
         """Format datetime to Canon date format."""
         # Arrange
-        from avi_riff_date_fixer import format_canon_date
-
         test_datetime = datetime(2006, 8, 31, 14, 14, 28)
 
         # Act
@@ -821,73 +810,6 @@ class TestRIFFPreservingAVIFunctionality:
 
         # Assert
         assert formatted_date == "THU AUG 31 14:14:28 2006"
-
-    def test_fix_avi_date_inplace_success(self):
-        """Fix AVI date in place successfully modifies IDIT chunk."""
-        # Arrange
-        from avi_riff_date_fixer import fix_avi_date_inplace
-
-        test_avi = self.test_directory / "test_with_idit.avi"
-        time_delta = timedelta(days=3)
-
-        # Act
-        result = fix_avi_date_inplace(test_avi, time_delta)
-
-        # Assert
-        assert result is True
-
-        # Verify the date was actually changed
-        from avi_riff_date_fixer import find_idit_chunk
-
-        modified_data = test_avi.read_bytes()
-        _, date_data = find_idit_chunk(modified_data)
-
-        assert b"THU AUG 31 14:14:28 2006" in date_data
-
-    def test_fix_avi_date_inplace_no_idit_chunk(self):
-        """Fix AVI date in place fails gracefully when no IDIT chunk present."""
-        # Arrange
-        from avi_riff_date_fixer import fix_avi_date_inplace
-
-        test_avi = self.test_directory / "test_without_idit.avi"
-        time_delta = timedelta(days=1)
-
-        # Act
-        result = fix_avi_date_inplace(test_avi, time_delta)
-
-        # Assert
-        assert result is False
-
-    def test_fix_avi_date_inplace_creates_backup(self):
-        """Fix AVI date in place creates and cleans up backup file properly."""
-        # Arrange
-        from avi_riff_date_fixer import fix_avi_date_inplace
-
-        test_avi = self.test_directory / "test_with_idit.avi"
-        original_content = test_avi.read_bytes()
-        time_delta = timedelta(days=1)
-
-        # Test successful case first
-        result_success = fix_avi_date_inplace(test_avi, time_delta)
-        backup_path = test_avi.with_suffix(".backup.avi")
-
-        # Assert successful case
-        assert result_success is True
-        assert not backup_path.exists()  # Backup should be cleaned up after success
-
-        # Reset file for failure test
-        test_avi.write_bytes(original_content)
-
-        # Now test failure case - use a file without IDIT chunk
-        test_avi_no_idit = self.test_directory / "test_without_idit.avi"
-        result_failure = fix_avi_date_inplace(test_avi_no_idit, time_delta)
-        backup_path_failure = test_avi_no_idit.with_suffix(".backup.avi")
-
-        # Assert failure case
-        assert result_failure is False
-        assert (
-            not backup_path_failure.exists()
-        )  # Backup should be cleaned up after failure too
 
     def test_metadata_time_changer_integration_with_riff_preserving(self):
         """MetadataTimeChanger integrates RIFF-preserving AVI functionality correctly."""
@@ -905,7 +827,7 @@ class TestRIFFPreservingAVIFunctionality:
 
         # Verify the date was actually changed
         modified_data = test_avi.read_bytes()
-        idit_pos, date_data = changer._find_idit_chunk(modified_data)
+        idit_pos, date_data = find_idit_chunk(modified_data)
 
         assert idit_pos is not None
         assert b"WED AUG 30 14:14:28 2006" in date_data
@@ -916,17 +838,17 @@ class TestRIFFPreservingAVIFunctionality:
         changer = MetadataTimeChanger(str(self.test_directory), "+1d")
 
         # Test _parse_canon_date
-        parsed_date = changer._parse_canon_date("MON AUG 28 14:14:28 2006")
+        parsed_date = parse_canon_date("MON AUG 28 14:14:28 2006")
         assert parsed_date == datetime(2006, 8, 28, 14, 14, 28)
 
         # Test _format_canon_date
-        formatted_date = changer._format_canon_date(datetime(2006, 8, 30, 14, 14, 28))
+        formatted_date = format_canon_date(datetime(2006, 8, 30, 14, 14, 28))
         assert formatted_date == "WED AUG 30 14:14:28 2006"
 
         # Test _find_idit_chunk
         test_avi = self.test_directory / "test_with_idit.avi"
         data = test_avi.read_bytes()
-        idit_pos, date_data = changer._find_idit_chunk(data)
+        idit_pos, date_data = find_idit_chunk(data)
 
         assert idit_pos is not None
         assert date_data is not None

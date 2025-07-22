@@ -38,6 +38,8 @@ except ImportError:
     ffmpeg = None
     subprocess = None
 
+from avi_riff_utils import find_idit_chunk, format_canon_date, parse_canon_date
+
 
 class TimeParsingError(Exception):
     """Exception raised when time format cannot be parsed."""
@@ -723,7 +725,7 @@ class MetadataTimeChanger:
                     data = bytearray(f.read())
 
                 # Find IDIT chunk
-                idit_pos, date_data = self._find_idit_chunk(data)
+                idit_pos, date_data = find_idit_chunk(data)
                 if idit_pos is None:
                     self.errors.append(f"No IDIT chunk found in {file_path}")
                     # Clean up backup before returning
@@ -733,15 +735,17 @@ class MetadataTimeChanger:
 
                 # Parse current date
                 current_date_str = date_data.decode("ascii", errors="ignore")
-                current_date = self._parse_canon_date(current_date_str)
+                current_date = parse_canon_date(current_date_str)
                 if current_date is None:
-                    self.errors.append(f"Could not parse current date in {file_path}")
+                    self.errors.append(
+                        f"Could not parse current date '{current_date_str.strip()}' in {file_path}"
+                    )
                     if backup_path.exists():
                         backup_path.unlink()
                     return False
 
                 # Calculate new date (use the provided timestamp)
-                new_date_str = self._format_canon_date(timestamp)
+                new_date_str = format_canon_date(timestamp)
                 new_date_bytes = new_date_str.encode("ascii")
 
                 # Pad or truncate to match original chunk size
@@ -780,49 +784,6 @@ class MetadataTimeChanger:
                 f"RIFF-preserving AVI modifier failed for {file_path}: {e}"
             )
             return False
-
-    def _find_idit_chunk(self, data):
-        """Find IDIT chunk in AVI RIFF data."""
-        # Look for IDIT signature
-        pos = data.find(b"IDIT")
-        if pos == -1:
-            return None, None
-
-        # IDIT chunk structure: IDIT + 4-byte size + data
-        if pos + 4 >= len(data):
-            return None, None
-
-        import struct
-
-        chunk_size = struct.unpack("<L", data[pos + 4 : pos + 8])[0]
-
-        # Get the actual date data
-        date_start = pos + 8
-        date_end = date_start + chunk_size
-
-        if date_end > len(data):
-            return None, None
-
-        date_data = data[date_start:date_end]
-
-        return (pos, date_data)
-
-    def _parse_canon_date(self, date_str):
-        """Parse Canon date format: 'MON AUG 28 14:14:28 2006'"""
-        try:
-            # Remove null bytes and extra whitespace
-            clean_date = date_str.strip().rstrip("\x00").strip()
-
-            # Parse the date format used by Canon
-            dt = datetime.strptime(clean_date, "%a %b %d %H:%M:%S %Y")
-            return dt
-        except ValueError as e:
-            self.errors.append(f"Could not parse Canon date '{clean_date}': {e}")
-            return None
-
-    def _format_canon_date(self, dt):
-        """Format date in Canon format: 'MON AUG 28 14:14:28 2006'"""
-        return dt.strftime("%a %b %d %H:%M:%S %Y").upper()
 
 
 def main():
