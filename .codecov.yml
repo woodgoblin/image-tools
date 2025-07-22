@@ -1,0 +1,30 @@
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+  
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 1%
+    patch:
+      default:
+        target: 75%
+        threshold: 1%
+
+ignore:
+  - "test_*.py"
+  - "conftest.py"
+  - "**/__pycache__/**"
+  - ".venv/**"
+  - ".pytest_cache/**"
+  - "requirements*.txt"
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: false 
